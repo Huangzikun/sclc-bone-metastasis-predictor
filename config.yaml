@@ -1,0 +1,262 @@
+
+project:
+  name: "Bone Metastasis Prediction Pipeline"
+  target: "Mets at DX-bone"
+
+paths:
+  raw_internal: "data/data.xlsx"
+  raw_external: "data/外部验证集.xlsx"
+  raw_external_supplement: null
+  artifacts_dir: "artifacts"
+
+cleaning:
+  already_encoded: true
+  drop_columns:
+    - "Pleural invasion"
+    - "Visceral and Parietal Pleural Invasion"
+  rename:
+    "Bone mets": "Mets at DX-bone"
+    "Sex": "Gender"
+    "Age ": "Age"
+    "Race": "Race"
+    "Race ": "Race"
+    "Marital status ": "Marital status"
+    "Primary site ": "Primary site"
+    "Laterality": "Laterality"
+    "T stage": "T stage"
+    "N stage": "N stage"
+    "Separate tumor nodule": "Separate Tumor Nodules Ipsilateral Lung"
+    "Separate Tumor Nodules Ipsilateral Lung ": "Separate Tumor Nodules Ipsilateral Lung"
+    "Tumor size ": "Tumor Size (mm)"
+    "Brain mets": "Brain Mets"
+    "Liver mets": "Mets at DX-liver"
+    "Mets at DX-liver ": "Mets at DX-liver"
+    "Lung mets": "Mets at DX-lung"
+    "Distant LN mets": "Mets at DX-Distant LN"
+  encodings:
+    Age:
+      type: age
+    Gender:
+      map: {Male: 0, Female: 1}
+    Race:
+      map: {White: 0, Black: 1, Other: 2}
+    "Marital status":
+      map:
+        Divorced: 0
+        "Married (including common law)": 1
+        Separated: 2
+        "Single (never married)": 3
+        "Unmarried or Domestic Partner": 4
+        Widowed: 5
+        Unknown: 6
+    "T stage":
+      map: {T1: 0, T1b: 0, T1c: 0, T2: 1, T2a: 1, T2b: 1, T3: 2, T4: 3}
+    "N stage":
+      map: {N0: 0, N1: 1, N2: 2, N3: 3}
+    "Separate Tumor Nodules Ipsilateral Lung":
+      map:
+        "None; No intrapulmonary mets; Foci in situ/minimally invasive adenocarcinoma": 0
+        "Separate nodules of same hist type in ipsilateral lung, same lobe": 1
+        "Separate nodules of same hist type in ipsilateral lung, different lobe": 2
+        "Separate nodules of same hist type in ipsilateral lung, same AND different lobes": 3
+        "Separate tumor nodules, ipsilateral lung, unknown if same or different lobe": 4
+        "Not documented; Primary tumor is in situ; Not assessed or unknown if assessed": 5
+    "Mets at DX-bone":
+      map: {"No": 0, "Yes": 1, Unknown: 2, Unknow: 2}
+    "Mets at DX-liver":
+      map: {"No": 0, "Yes": 1, Unknown: 2}
+    "Mets at DX-lung":
+      map: {"No": 0, "Yes": 1, Unknown: 2}
+    "Mets at DX-Distant LN":
+      map: {"No": 0, "Yes": 1, Unknown: 2, "None; no lymph node metastases": 0}
+    "Brain Mets":
+      map: {"No": 0, "Yes": 1}
+  unknown_code: 7
+
+splitting:
+  test_size: 0.3
+  random_state: 3047
+  files:
+    X_train: "X_train.csv"
+    y_train: "y_train.csv"
+    X_val: "X_val.csv"
+    y_val: "y_val.csv"
+    X_external: "X_external.csv"
+    y_external: "y_external.csv"
+
+feature_selection:
+  target: "Mets at DX-bone"
+  force_include: ["Tumor Size (mm)"]
+  univariate_p_threshold: 0.05
+  multivariate_p_threshold: 0.05
+  use_selected: true
+  explicit_features:
+    - "Gender"
+    - "Age"
+    - "Marital status"
+    - "Primary site"
+    - "Laterality"
+    - "T stage"
+    - "N stage"
+    - "Separate Tumor Nodules Ipsilateral Lung"
+    - "Tumor Size (mm)"
+    - "Brain Mets"
+    - "Mets at DX-liver"
+    - "Mets at DX-lung"
+    - "Mets at DX-Distant LN"
+
+training:
+  target: "Mets at DX-bone"
+  features_source: "explicit"
+  class_weight: "balanced"
+  smote:
+    enabled: true
+    sampling_strategy: 0.5
+    random_state: 42
+  scaler: "standard"
+  onehot_features:
+    - "Marital status"
+    - "Primary site"
+  calibration:
+    enabled: true
+    method: "isotonic"
+    folds: 5
+  cv:
+    folds: 5
+    compare_folds: 10
+    scoring: "roc_auc"
+  search:
+    method: "optuna"
+    n_trials: 40
+    n_iter: 50
+    random_state: 42
+    n_jobs: -1
+  models:
+    - name: "RF"
+      import: "sklearn.ensemble"
+      class: "RandomForestClassifier"
+      search: true
+      fixed_params:
+        random_state: 42
+      params:
+        n_estimators: {arange: [50, 200, 10]}
+        max_depth: {arange: [20, 200, 5]}
+        min_samples_split: {arange: [2, 10]}
+        min_samples_leaf: {arange: [1, 10]}
+        max_features: ["sqrt", "log2", null]
+    - name: "LR"
+      import: "sklearn.linear_model"
+      class: "LogisticRegression"
+      search: true
+      fixed_params:
+        random_state: 42
+      params:
+        C: {logspace: [-3, 1.69897, 20]}
+        penalty: ["l1", "l2"]
+        solver: ["liblinear", "saga"]
+    - name: "XGB"
+      import: "xgboost"
+      class: "XGBClassifier"
+      search: true
+      search_n_jobs: 1
+      fixed_params:
+        objective: "binary:logistic"
+        eval_metric: "auc"
+        n_jobs: -1
+        random_state: 42
+      params:
+        n_estimators: {arange: [50, 250, 50]}
+        max_depth: {arange: [3, 16, 2]}
+        learning_rate: {logspace: [-3, 0, 6]}
+        min_child_weight: {arange: [1, 8, 2]}
+        gamma: {logspace: [-3, 1, 5]}
+        subsample: {linspace: [0.5, 1, 5]}
+        colsample_bytree: {linspace: [0.5, 1, 5]}
+        reg_alpha: {logspace: [-3, 3, 5]}
+        reg_lambda: {logspace: [-3, 3, 5]}
+        scale_pos_weight: {linspace: [0.5, 5, 5]}
+    - name: "BNB"
+      import: "sklearn.naive_bayes"
+      class: "BernoulliNB"
+      search: true
+      params:
+        alpha: {logspace: [-3, 3, 10]}
+        binarize: {linspace: [0, 1, 10]}
+        fit_prior: [true, false]
+    - name: "DT"
+      import: "sklearn.tree"
+      class: "DecisionTreeClassifier"
+      search: true
+      fixed_params:
+        random_state: 42
+      params:
+        criterion: ["gini", "entropy"]
+        max_depth: {arange: [3, 20]}
+        min_samples_split: {arange: [2, 10]}
+        min_samples_leaf: {arange: [1, 10]}
+        max_features: ["sqrt", "log2", null]
+    - name: "MLP"
+      import: "sklearn.neural_network"
+      class: "MLPClassifier"
+      search: true
+      search_n_trials: 20
+      fixed_params:
+        max_iter: 10000
+        tol: 0.0001
+        early_stopping: true
+        random_state: 42
+      params:
+        hidden_layer_sizes: [[10], [20], [10, 10], [20, 20]]
+        activation: ["relu", "tanh", "logistic"]
+        solver: ["adam", "lbfgs", "sgd"]
+        alpha: {logspace: [-4, 2, 7]}
+        learning_rate: ["constant", "invscaling", "adaptive"]
+    - name: "KNN"
+      import: "sklearn.neighbors"
+      class: "KNeighborsClassifier"
+      search: true
+      params:
+        n_neighbors: {arange: [1, 50]}
+        weights: ["uniform", "distance"]
+        p: [1, 2]
+    - name: "SVM"
+      import: "sklearn.svm"
+      class: "SVC"
+      search: false
+      fixed_params:
+        probability: true
+        random_state: 42
+    - name: "LGBM"
+      import: "lightgbm"
+      class: "LGBMClassifier"
+      search: true
+      search_n_trials: 40
+      fixed_params:
+        verbosity: -1
+        n_jobs: 1
+        random_state: 42
+      params:
+        n_estimators: {arange: [50, 400, 50]}
+        num_leaves: {arange: [7, 128, 15]}
+        max_depth: {arange: [3, 13, 2]}
+        learning_rate: {logspace: [-2.3, -0.7, 6]}
+        subsample: {linspace: [0.6, 1, 5]}
+        colsample_bytree: {linspace: [0.6, 1, 5]}
+        min_child_samples: {arange: [5, 60, 10]}
+        reg_alpha: {logspace: [-3, 1, 5]}
+        reg_lambda: {logspace: [-3, 2, 5]}
+    - name: "CatBoost"
+      import: "catboost"
+      class: "CatBoostClassifier"
+      search: true
+      search_n_trials: 30
+      fixed_params:
+        verbose: false
+        allow_writing_files: false
+        thread_count: 1
+        random_seed: 42
+      params:
+        iterations: {arange: [100, 600, 100]}
+        depth: {arange: [4, 10]}
+        learning_rate: {logspace: [-2, -0.3, 5]}
+        l2_leaf_reg: {logspace: [0, 2, 5]}

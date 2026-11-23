@@ -1,0 +1,40 @@
+# ---- 运行产物（可由 `run.py --all` 一键重建，不纳入版本库）----
+artifacts/
+
+# ---- Python 缓存 / 字节码 ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+env/
+
+# ---- 编辑器 / 系统 ----
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# ---- 内部 / 代理工作数据（不纳入版本库）----
+.workbuddy/
+
+# ---- 本地数据备份（旧数据已在 git 历史中）----
+data_backup_*/
+
+# ---- 源交付 zip（数据已提取进 data/）----
+给黄老师.zip
+
+# ---- 临时运行日志 ----
+delivery_train.log
+*.log
+
+# ---- 交付压缩包 ----
+*.zip
+# 交付物（本地保留，不入库，可由 delivery_train/render 重新生成）
+delivery/
